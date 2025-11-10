@@ -39,7 +39,7 @@ type AWSPCAIssuerSpec struct {
 	SecretRef AWSCredentialsSecretReference `json:"secretRef,omitempty"`
 	// Specifies the ARN of role to assume when issuing certificates.
 	// +optional
-	RoleArn string `json:"roleArn,omitempty"`
+	Role string `json:"role,omitempty"`
 }
 
 // AWSCredentialsSecretReference defines the secret used by the issuer

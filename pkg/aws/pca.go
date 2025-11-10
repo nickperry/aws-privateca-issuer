@@ -135,9 +135,9 @@ func LoadConfig(ctx context.Context, client client.Client, spec *api.AWSPCAIssue
 		return aws.Config{}, err
 	}
 
-	if spec.RoleArn != "" {
+	if spec.Role != "" {
 		stsService := sts.NewFromConfig(cfg)
-		creds := stscreds.NewAssumeRoleProvider(stsService, spec.RoleArn)
+		creds := stscreds.NewAssumeRoleProvider(stsService, spec.Role)
 		cfg.Credentials = aws.NewCredentialsCache(creds)
 	}
 
