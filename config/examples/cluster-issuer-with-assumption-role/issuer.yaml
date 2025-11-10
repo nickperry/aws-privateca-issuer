@@ -4,5 +4,5 @@ metadata:
   name: example
 spec:
   arn: <some-pca-arn>
-  roleArn: <some-role-arn>
+  role: <some-role-arn>
   region: us-west-2
