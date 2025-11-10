@@ -37,6 +37,14 @@ type AWSPCAIssuerSpec struct {
 	// Needs to be specified if you want to authorize with AWS using an access and secret key
 	// +optional
 	SecretRef AWSCredentialsSecretReference `json:"secretRef,omitempty"`
+	// ExplicitTemplateSelection controls whether the issuer will honor the
+	// aws-privateca.cert-manager.io/template-arn annotation on Certificate
+	// resources. When set to true, the annotation (if present) will be used
+	// to select the PCA template ARN. When false, the annotation will be
+	// ignored and the template will be selected based on the Certificate spec.
+	// Defaults to false.
+	// +optional
+	ExplicitTemplateSelection bool `json:"explicitTemplateSelection,omitempty"`
 }
 
 // AWSCredentialsSecretReference defines the secret used by the issuer
