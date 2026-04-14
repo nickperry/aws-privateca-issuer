@@ -46,15 +46,15 @@ OS := $(shell go env GOOS)
 ARCH := $(shell go env GOARCH)
 
 # Kind
-KIND_VERSION := 0.19.0
+KIND_VERSION := 0.27.0
 KIND := ${BIN}/kind-${KIND_VERSION}
 K8S_CLUSTER_NAME := pca-external-issuer
 
 # cert-manager
-CERT_MANAGER_VERSION ?= v1.17.1
+CERT_MANAGER_VERSION ?= v1.20.0
 
 # Controller tools
-CONTROLLER_GEN_VERSION := 0.17.3
+CONTROLLER_GEN_VERSION := 0.20.1
 CONTROLLER_GEN := ${BIN}/controller-gen-${CONTROLLER_GEN_VERSION}
 
 # Helm tools
@@ -65,16 +65,19 @@ INSTALL_YAML ?= build/install.yaml
 all: manager
 
 # Run tests
-ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
-test: generate fmt vet lint manifests
-	mkdir -p ${ENVTEST_ASSETS_DIR}
-	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.7.0/hack/setup-envtest.sh
-	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); go test -v ./pkg/... -coverprofile cover.out
+# Run tests
+ENVTEST_K8S_VERSION ?= 1.27.x
+ENVTEST = $(shell pwd)/bin/setup-envtest
 
-e2etest: test
-	mkdir -p ${ENVTEST_ASSETS_DIR}
-	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.7.0/hack/setup-envtest.sh
-	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); go test -v ./e2e/... -coverprofile cover.out
+.PHONY: envtest
+envtest:
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
+
+test: generate fmt vet lint manifests envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(shell pwd)/bin -p path)" GOTOOLCHAIN=go1.26.1+auto go test -v ./pkg/... -coverprofile cover.out
+
+e2etest: test envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(shell pwd)/bin -p path)" GOTOOLCHAIN=go1.26.1+auto go test -v ./e2e/... -coverprofile cover.out
 
 helm-test: manager kind-cluster
 	$$SHELL e2e/helm_test.sh
@@ -335,3 +338,4 @@ ${BIN}:
 ${KIND}: ${BIN}
 	curl -sSL -o ${KIND} https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-${OS}-${ARCH}
 	chmod +x ${KIND}
+

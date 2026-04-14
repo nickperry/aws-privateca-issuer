@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cert-manager/aws-privateca-issuer/pkg/api/v1beta1"
 	clientV1beta1 "github.com/cert-manager/aws-privateca-issuer/pkg/clientset/v1beta1"
@@ -31,7 +32,7 @@ type TestContext struct {
 	xaCfg     aws.Config
 	caArns    map[string]string
 
-	region, partition, accessKey, secretKey, endEntityResourceShareArn, subordinateCaResourceShareArn, userName, policyArn string
+	region, partition, accessKey, secretKey, endEntityResourceShareArn, subordinateCaResourceShareArn, userName, policyArn, roleToAssume string
 }
 
 // These are variables specific to each test
@@ -65,10 +66,10 @@ func TestMain(m *testing.M) {
 		log.Printf("Skipping CrossAccount tests")
 		o.Tags = "~@CrossAccount"
 	} else {
-		log.Printf("Using CrossAccount role: " + roleName)
+		log.Printf("Using CrossAccount role: %s", roleName)
 	}
 
-	log.Printf(fmt.Sprintf("Running tests with the following tags: %s", o.Tags))
+	log.Printf("Running tests with the following tags: %s", o.Tags)
 	status := godog.TestSuite{
 		Name:                 "AWSPrivateCAIssuer",
 		Options:              &o,
@@ -111,7 +112,19 @@ func InitializeTestSuite(suiteCtx *godog.TestSuiteContext) {
 			panic(cfgErr.Error())
 		}
 
-		testContext.partition = getPartition(ctx, cfg)
+		callerID := getCallerIdentity(ctx, cfg)
+
+		parsedArn, parseErr := arn.Parse(*callerID.Arn)
+		if parseErr != nil {
+			panic("Failed to parse caller identity ARN: " + parseErr.Error())
+		}
+
+		testContext.partition = parsedArn.Partition
+
+		testContext.roleToAssume = fmt.Sprintf("arn:%s:iam::%s:role/IssuerTestRole-test-us-east-1", testContext.partition, *callerID.Account)
+		if roleToAssumeOverride, exists := os.LookupEnv("ROLE_TO_ASSUME_OVERRIDE"); exists {
+			testContext.roleToAssume = roleToAssumeOverride
+		}
 
 		testContext.iclient, err = clientV1beta1.NewForConfig(clientConfig)
 
@@ -131,6 +144,13 @@ func InitializeTestSuite(suiteCtx *godog.TestSuiteContext) {
 
 		testContext.caArns["ECDSA"] = testContext.createCertificateAuthority(ctx, cfg, false)
 		log.Printf("Created EC CA with arn %s", testContext.caArns["ECDSA"])
+
+		// Create subordinate CAs for template testing
+		testContext.caArns["RSA-SUB"] = createSubCertificateAuthority(ctx, cfg, true, testContext.caArns["RSA"])
+		log.Printf("Created RSA-SUB CA with arn %s", testContext.caArns["RSA-SUB"])
+
+		testContext.caArns["ECDSA-SUB"] = createSubCertificateAuthority(ctx, cfg, false, testContext.caArns["ECDSA"])
+		log.Printf("Created ECDSA-SUB CA with arn %s", testContext.caArns["ECDSA-SUB"])
 
 		xaRole, xaRoleExists := os.LookupEnv(CrossAccountRoleKey)
 		if xaRoleExists {
@@ -170,11 +190,17 @@ func InitializeTestSuite(suiteCtx *godog.TestSuiteContext) {
 	suiteCtx.AfterSuite(func() {
 		ctx := context.TODO()
 
-		log.Printf(strings.Join(errDetails, "\n"))
+		log.Print(strings.Join(errDetails, "\n"))
 		cfg, cfgErr := config.LoadDefaultConfig(ctx, config.WithRegion(testContext.region))
 		if cfgErr != nil {
 			panic(cfgErr.Error())
 		}
+
+		deleteCertificateAuthority(ctx, cfg, testContext.caArns["RSA-SUB"])
+		log.Printf("Deleted the RSA-SUB CA")
+
+		deleteCertificateAuthority(ctx, cfg, testContext.caArns["ECDSA-SUB"])
+		log.Printf("Deleted the ECDSA-SUB CA")
 
 		deleteCertificateAuthority(ctx, cfg, testContext.caArns["RSA"])
 		log.Printf("Deleted the RSA CA")
@@ -216,11 +242,17 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	// This defines the mapping of steps --> functions
 	ctx.Step(`^I create a namespace`, issuerContext.createNamespace)
 	ctx.Step(`^I create a Secret with keys ([A-Za-z_]+) and ([A-Za-z_]+) for my AWS credentials$`, issuerContext.createSecret)
-	ctx.Step(`^I create an AWSPCAClusterIssuer using a (RSA|ECDSA|XA) CA$`, issuerContext.createClusterIssuer)
+	ctx.Step(`^I create an AWSPCAClusterIssuer using a (RSA|ECDSA|RSA-SUB|ECDSA-SUB|XA) CA$`, issuerContext.createClusterIssuer)
+	ctx.Step(`^I create an AWSPCAClusterIssuer with template ([^\s]+) using a (RSA|ECDSA|RSA-SUB|ECDSA-SUB) CA$`, issuerContext.createClusterIssuerWithTemplate)
+	ctx.Step(`^I create an AWSPCAClusterIssuer with role assumption$`, issuerContext.createClusterIssuerWithRole)
 	ctx.Step(`^I delete the AWSPCAClusterIssuer$`, issuerContext.deleteClusterIssuer)
 	ctx.Step(`^I create an AWSPCAIssuer using a (RSA|ECDSA|XA) CA$`, issuerContext.createNamespaceIssuer)
+	ctx.Step(`^I create an AWSPCAIssuer with role assumption$`, issuerContext.createNamespaceIssuerWithRole)
 	ctx.Step(`^I issue a (SHORT_VALIDITY|RSA|ECDSA|CA) certificate$`, issuerContext.issueCertificate)
+	ctx.Step(`^I issue a ([A-Z_]+) certificate with usage ([a-z_,]+)$`, issuerContext.issueCertificateWithUsage)
 	ctx.Step(`^the certificate should be issued successfully$`, issuerContext.verifyCertificateIssued)
+	ctx.Step(`^the certificate should be issued with usage ([a-z_,]+)$`, issuerContext.verifyCertificateUsage)
+	ctx.Step(`^the CA certificate should have path length (\d+)$`, issuerContext.verifyCertificateAuthorityPathLen)
 	ctx.Step(`^the certificate request has been created$`, issuerContext.verifyCertificateRequestIsCreated)
 	ctx.Step(`^the certificate request has reason (Pending|Failed|Issued|Denied) and status (True|False|Unknown)$`, issuerContext.verifyCertificateRequestState)
 

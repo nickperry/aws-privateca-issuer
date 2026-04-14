@@ -37,6 +37,20 @@ type AWSPCAIssuerSpec struct {
 	// Needs to be specified if you want to authorize with AWS using an access and secret key
 	// +optional
 	SecretRef AWSCredentialsSecretReference `json:"secretRef,omitempty"`
+	// Specifies the ARN of role to assume when issuing certificates.
+	// +optional
+	Role string `json:"role,omitempty"`
+	// Specifies PCA template configuration for this issuer.
+	// +optional
+	PCATemplate *PCATemplate `json:"pcaTemplate,omitempty"`
+}
+
+// PCATemplate defines PCA template configuration
+type PCATemplate struct {
+	// Specifies the default template name for all certificate requests made to this issuer.
+	// If not specified, the template is determined from the usages on the certificate resource.
+	// +optional
+	DefaultTemplateName string `json:"defaultTemplateName,omitempty"`
 }
 
 // AWSCredentialsSecretReference defines the secret used by the issuer

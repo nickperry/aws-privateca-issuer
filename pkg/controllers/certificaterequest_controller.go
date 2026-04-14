@@ -169,7 +169,11 @@ func (r *CertificateRequestReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	certArn, exists := cr.ObjectMeta.GetAnnotations()["aws-privateca-issuer/certificate-arn"]
 	if !exists {
-		err := provisioner.Sign(ctx, cr, log)
+		var pcaTemplateName string
+		if iss.GetSpec().PCATemplate != nil {
+			pcaTemplateName = iss.GetSpec().PCATemplate.DefaultTemplateName
+		}
+		err := provisioner.Sign(ctx, cr, pcaTemplateName, log)
 		if err != nil {
 			log.Error(err, "failed to request certificate from PCA")
 			return ctrl.Result{}, r.setStatus(ctx, cr, cmmeta.ConditionFalse, cmapi.CertificateRequestReasonFailed, "failed to request certificate from PCA: "+err.Error())
@@ -211,14 +215,13 @@ func isReady(issuer api.GenericIssuer) bool {
 	return false
 }
 
-func (r *CertificateRequestReconciler) setStatus(ctx context.Context, cr *cmapi.CertificateRequest, status cmmeta.ConditionStatus, reason, message string, args ...interface{}) error {
-	completeMessage := fmt.Sprintf(message, args...)
-	cmutil.SetCertificateRequestCondition(cr, "Ready", status, reason, completeMessage)
+func (r *CertificateRequestReconciler) setStatus(ctx context.Context, cr *cmapi.CertificateRequest, status cmmeta.ConditionStatus, reason, message string) error {
+	cmutil.SetCertificateRequestCondition(cr, "Ready", status, reason, message)
 
 	eventType := core.EventTypeNormal
 	if status == cmmeta.ConditionFalse {
 		eventType = core.EventTypeWarning
 	}
-	r.Recorder.Event(cr, eventType, reason, completeMessage)
+	r.Recorder.Event(cr, eventType, reason, message)
 	return r.Client.Status().Update(ctx, cr)
 }
