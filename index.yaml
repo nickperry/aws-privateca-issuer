@@ -9,6 +9,6 @@ entries:
     name: aws-privateca-issuer
     type: application
     urls:
-    - aws-privateca-issuer-v1.8.1-5-gfb6b836.tgz
+    - https://github.com/nickperry/aws-privateca-issuer/releases/download/aws-privateca-issuer-v1.8.1-5-gfb6b836/aws-privateca-issuer-v1.8.1-5-gfb6b836.tgz
     version: v1.8.1-5-gfb6b836
 generated: "2026-04-15T18:53:54.073313+01:00"
