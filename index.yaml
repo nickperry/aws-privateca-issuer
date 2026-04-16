@@ -11,4 +11,14 @@ entries:
     urls:
     - https://github.com/nickperry/aws-privateca-issuer/releases/download/aws-privateca-issuer-v1.8.1-5-gfb6b836/aws-privateca-issuer-v1.8.1-5-gfb6b836.tgz
     version: v1.8.1-5-gfb6b836
-generated: "2026-04-15T18:53:54.073313+01:00"
+  - apiVersion: v2
+    appVersion: v1.8.1-5-gfb6b836
+    created: "2026-04-16T11:06:28.222404+01:00"
+    description: An addon for cert-manager to sign certificates using AWS PCA
+    digest: 272094455a786049ea23c78e50c32e6528653d62d0ba81fd907b8806078523f5
+    name: aws-privateca-issuer
+    type: application
+    urls:
+    - aws-privateca-issuer-v1.8.1-5-gfb6b836.tgz
+    version: v1.8.1-5-gfb6b836
+generated: "2026-04-16T11:06:28.222425+01:00"
